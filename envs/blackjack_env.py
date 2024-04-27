@@ -83,7 +83,6 @@ class BlackjackEnv(gym.Env):
 	def _compare_hands(self):
 		player_sum = self._sum_hand(self.player_hand)
 		dealer_sum = self._sum_hand(self.dealer_hand)
-		print(player_sum, dealer_sum)
 		if player_sum > dealer_sum:
 			return 1.0, "Player Hand Win"
 		elif player_sum == dealer_sum:
@@ -123,14 +122,17 @@ class BlackjackEnv(gym.Env):
 
 if __name__ == '__main__':
 	env = BlackjackEnv()
+	use_expert_action = True
 
 	avg_reward = 0
-	for i in range(100):
+	for i in range(1000):
 		state = env.reset()
 		done = False
 		while not done:
-			action = env.get_expert_action()
-			# action = env.action_space.sample()
+			if use_expert_action:
+				action = env.get_expert_action()
+			else:
+				action = env.action_space.sample()
 			next_state, reward, done, info = env.step(action)
 			print(f"STATE: {state} | ACTION: {action} | NEXT STATE: {next_state} | REWARD: {reward} | DONE: {done} | INFO: {info}")
 			state = next_state
@@ -144,5 +146,5 @@ if __name__ == '__main__':
 		print("Final Info: ", info)
 		print("\n")
 	
-	avg_reward = avg_reward / 100
+	avg_reward = avg_reward / 1000
 	print("Average Reward: ", avg_reward)
