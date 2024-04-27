@@ -22,5 +22,3 @@ class Actor(nn.Module):
         std = torch.ones_like(mu) * std
         dist = utils.TruncatedNormal(mu, std)
         return dist
-
-
