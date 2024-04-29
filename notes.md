@@ -10,3 +10,13 @@ look at what supervised learning papers do
 aim: after training, can our agent summarize the cases each expert is adversarial on?
 
 try adding contrastive learning to bc to improve detection of adversarial advice - give observation, bad_action, good_action in fixed dataset
+
+TODO:
+
+Rushabh
+- create car racing env
+- create car racing dataset
+
+Pranav
+- finish agent files
+- work on network architecture
