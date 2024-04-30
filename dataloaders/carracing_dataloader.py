@@ -17,6 +17,7 @@ class CarRacingDataset(Dataset):
 				action, _ = self.expert.predict(obs, deterministic=True)
 				# print(obs.size, expert_action.size)
 				self.data.append((obs, action))
+				print("obs and action shape --> ", obs.shape, action.shape)
 				obs, _, done, _ = self.env.step(action)
 		
 	def __len__(self):
