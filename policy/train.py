@@ -1,5 +1,5 @@
 """
-    This file carries out training of the specified agent on the specified environment.
+	This file carries out training of the specified agent on the specified environment.
 """
 
 import warnings
@@ -17,13 +17,15 @@ from video import VideoRecorder
 from uitls import ExpertBuffer
 from tqdm import tqdm
 from agent.bcrl_agent import Agent
+from stable_baselines3 import PPO
+from dataloaders.carracing_dataloader import CarRacingDataLoader
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 torch.backends.cudnn.benchmark = True
 
 class Workspace:
 	def __init__(self, cfg):
-        # init the environment and the agent.
+		# init the environment and the agent.
 		self._work_dir = os.getcwd()
 		print(f'workspace: {self._work_dir}')
 
@@ -38,14 +40,25 @@ class Workspace:
 										  self.train_env.action_space.shape)
 		
 		self.agent = Agent(self.train_env.observation_space.shape, 
-                           self.train_env.action_space.shape,
-                           cfg.hidden_dim, cfg.lr, cfg.device, cfg.num_expl_steps, cfg.stddev_schedule)
+						   self.train_env.action_space.shape,
+						   cfg.hidden_dim, cfg.lr, cfg.device, cfg.num_expl_steps, cfg.stddev_schedule)
+		self.experiment_type = 'car_racing'
+		self.car_expert = PPO.load("ppo-CarRacing-v2.zip")
+		# TODO: Change the dataloader API so it doesn't need the env.
+		self.dataloader = CarRacingDataLoader(self.train_env, cfg.num_samples, cfg.batch_size)
+		self.train_env.reset() # Reset env after loading some data.
+  
+	def get_expert_action(self, obs):
+		if self.experiment_type == 'blackjack':
+			pass
+		elif self.experiment_type == 'car_racing':
+			return self.car_expert.predict(obs, deterministic=True)
 		
 	def eval(self, ep_num):
 		# A function that evaluates the 
 		# Set the DAgger model to evaluation
 		self.agent.model_eval()
-        # TODO: Check if removing cpu() at places okay?
+		# TODO: Check if removing cpu() at places okay?
 		avg_eval_reward = 0.
 		avg_episode_length = 0.
 		successes = 0
@@ -53,7 +66,7 @@ class Workspace:
 			eval_reward = 0.
 			ep_length = 0.
 			obs = self.eval_env.reset()
-            # use the environment and the policy to get the observation.
+			# use the environment and the policy to get the observation.
 			with torch.no_grad():
 				action = self.agent.act(obs)
 			truncated = False
@@ -74,12 +87,12 @@ class Workspace:
 		avg_eval_reward /= self.cfg.num_eval_episodes
 		avg_episode_length /= self.cfg.num_eval_episodes
 		# success_rate = successes / self.cfg.num_eval_episodes
-        # TODO: Do proper logging using wandb.
+		# TODO: Do proper logging using wandb.
 		return avg_eval_reward, avg_episode_length
 
 
 	def model_training_step(self):
-        # This function will update the policy based on the current policy, ACN and expert replay.
+		# This function will update the policy based on the current policy, ACN and expert replay.
 		# Number of optimization step should be self.cfg.num_training_steps.
 
 		# Set the model to training.
@@ -92,7 +105,7 @@ class Workspace:
 			obs, expert_action = self.expert_buffer.sample(self.cfg.batch_size)
 			obs = torch.from_numpy(obs).float().to(self.device)
 			expert_action = torch.from_numpy(expert_action).float().to(self.device)
-            # Supposed to update the current policy by taking an optimization step using ACN.
+			# Supposed to update the current policy by taking an optimization step using ACN.
 			step_loss = self.agent.policy_update(obs, expert_action)
 			# self.optimizer.zero_grad()
 			# loss.backward()
@@ -105,12 +118,27 @@ class Workspace:
 
 	def run(self):
 		train_loss, eval_reward, episode_length = None, 0, 0
+		bc_iterable = tqdm.trange(self.cfg.num_bc_eps)
+		# TODO: Make sure that these APIs to the agent are correct.
+		self.agent.model_train()
+		for ep_num in bc_iterable:
+			iterable.set_description('Performing BC for actor')
+			# Sample a batch from the BC dataloader.
+			# Update the policy using the batch.
+			obs, expert_action = self.dataloader.sample(self.cfg.batch_size)
+			# TODO: ensure correct APIs
+			self.agent.update_bc(obs, expert_action)
+		bc_iterable = tqdm.trange(self.cfg.num_bc_eps)
+		for ep_num in bc_iterable:
+			iterable.set_description('Performing contrastive learning on the ACN')
+			obs, expert_action = self.dataloader.sample(self.cfg.batch_size)
+			self.agent.update_acn(obs, expert_action)
 		iterable = tqdm.trange(self.cfg.total_training_episodes)
 		exp_call_vs_success_rate = []
+		# obs = self.train_env.reset()
 		for ep_num in iterable:
-			iterable.set_description('Collecting exp')
-			# Set the DAGGER model to evaluation
-			self.model.eval()
+			iterable.set_description('Online RL stage')
+			self.agent.model_eval()
 			ep_train_reward = 0.
 			ep_length = 0.
 
@@ -133,20 +161,20 @@ class Workspace:
 			
 			# TODO training loop here.
 
-			obs = self.train_env.reset(reset_goal=True) # Get the initial observation
+			obs = self.train_env.reset() # Get the initial observation
 			goal_numpy = self.train_env.goal
 			goal = torch.from_numpy(goal_numpy).float().to(self.device).unsqueeze(0)
    
 			done = False
 			while not done:
-				expert_action = self.train_env.get_expert_action()
-				self.expert_buffer.insert(obs, goal_numpy, expert_action)
+				expert_action = self.get_expert_action(obs)
+				self.expert_buffer.insert(obs, expert_action)
 
 				obs_tensor = torch.from_numpy(obs).float().to(self.device).unsqueeze(0)
 				with torch.no_grad():
-					action = self.model(obs_tensor, goal)
+					action = self.agent.act(obs_tensor)
 				action = action.squeeze().detach().cpu().numpy()
-				obs, reward, done, _ = self.train_env.step(action)
+				obs, reward, terminated, truncated, _ = self.train_env.step(action)
 				ep_train_reward += reward
 				ep_length += 1
 
