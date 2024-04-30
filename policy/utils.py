@@ -19,17 +19,17 @@ class ExpertBuffer:
     def __init__(self, max_length, obs_shape, action_shape):
         # Creates a buffer to hold all the expert demonstrations
         self._obs_buffer = np.empty(shape=(max_length, *obs_shape), dtype=np.float64)
-        self._goal_buffer = np.empty(shape=(max_length, *obs_shape), dtype=np.float64)
+        # self._goal_buffer = np.empty(shape=(max_length, *obs_shape), dtype=np.float64)
         self._expert_action_buffer = np.empty(shape=(max_length, *action_shape), dtype=np.float64)
         self._current_index = 0
         self._is_full = False
         self.capacity = max_length
 
-    def insert(self, obs, goal, action):
+    def insert(self, obs, action):
         # Insert an image observation along with the expert action in the buffer.
         insert_idx = self._current_index
         np.copyto(self._obs_buffer[insert_idx], obs)
-        np.copyto(self._goal_buffer[insert_idx], goal)
+        # np.copyto(self._goal_buffer[insert_idx], goal)
         np.copyto(self._expert_action_buffer[insert_idx], action)
         self._current_index = (self._current_index + 1) % self.capacity
         if self._current_index == 0:
@@ -44,9 +44,9 @@ class ExpertBuffer:
         batch_indices = np.random.randint(low=0, high=current_length, size=batch_size)
 
         batch_obs = self._obs_buffer[batch_indices]
-        batch_goal = self._goal_buffer[batch_indices]
+        # batch_goal = self._goal_buffer[batch_indices]
         batch_action = self._expert_action_buffer[batch_indices]
-        return batch_obs, batch_goal, batch_action
+        return batch_obs, batch_action
 
 
 class eval_mode:
