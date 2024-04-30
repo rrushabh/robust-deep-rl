@@ -90,7 +90,22 @@ class Workspace:
 		# TODO: Do proper logging using wandb.
 		return avg_eval_reward, avg_episode_length
 
-
+	# TODO: Make sure that obs is in the correct shape and everything here is numpy.
+	# TODO: Make sure are the shapes are shaping here.
+	def augment_data(self, obs, expert_action): # Numpy mode.
+		# obs: B x C x H x W
+		# expert_action: B x A
+		# A : 1x3
+		expert_action_bad = expert_action.copy()
+		expert_action_bad[:, 0] = -expert_action_bad[:, 0]
+		confidence_good = np.ones((obs.shape[0], 1))
+		confidence_bad = np.zeros((obs.shape[0], 1))
+		obs_new = np.concatenate([obs, obs], axis=0)
+		expert_action_new = np.concatenate([expert_action, expert_action_bad], axis=0)
+		confidence = np.concatenate([confidence_good, confidence_bad], axis=0)
+		confidence = np.ones((obs_new.shape[0], 1))
+		return obs_new, expert_action_new, confidence
+ 
 	def model_training_step(self):
 		# This function will update the policy based on the current policy, ACN and expert replay.
 		# Number of optimization step should be self.cfg.num_training_steps.
@@ -131,8 +146,11 @@ class Workspace:
 		bc_iterable = tqdm.trange(self.cfg.num_bc_eps)
 		for ep_num in bc_iterable:
 			iterable.set_description('Performing contrastive learning on the ACN')
+			#TODO: Make sure this is numpy.. and also make sure its converted to tensor at the right time.
 			obs, expert_action = self.dataloader.sample(self.cfg.batch_size)
-			self.agent.update_acn(obs, expert_action)
+			obs, expert_action, confidence = self.augment_data(obs, expert_action)
+			#TODO: Make sure the Agent is be able to hand 2 * batch_size for the batch size.
+			self.agent.update_acn(obs, expert_action, confidence)
 		iterable = tqdm.trange(self.cfg.total_training_episodes)
 		exp_call_vs_success_rate = []
 		# obs = self.train_env.reset()
@@ -142,28 +160,7 @@ class Workspace:
 			ep_train_reward = 0.
 			ep_length = 0.
 
-			# TODO write the training loop.
-			# 1. Roll out your current model on the environment.
-			# 2. On each step, after calling either env.reset() or env.step(), call 
-			#    env.get_expert_action() to get the expert action for the current 
-			#    state of the environment.
-			# 3. Store that observation alongside the expert action in the buffer.
-			# 4. When you are training, use the stored obs and expert action.
-
-			# Hints:
-			# 1. You will need to convert your obs to a torch tensor before passing it
-			#    into the model.
-			# 2. You will need to convert your action predicted by the model to a numpy
-			#    array before passing it to the environment.
-			# 3. Make sure the actions from your model are always in the (-1, 1) range.
-			# 4. Both the environment observation and the expert action needs to be a
-			#    numpy array before being added to the environment.
-			
-			# TODO training loop here.
-
 			obs = self.train_env.reset() # Get the initial observation
-			goal_numpy = self.train_env.goal
-			goal = torch.from_numpy(goal_numpy).float().to(self.device).unsqueeze(0)
    
 			done = False
 			while not done:
