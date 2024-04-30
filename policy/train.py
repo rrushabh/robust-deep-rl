@@ -52,7 +52,28 @@ class Workspace:
 		if self.experiment_type == 'blackjack':
 			pass
 		elif self.experiment_type == 'car_racing':
-			return self.car_expert.predict(obs, deterministic=True)
+			action = self.car_expert.predict(obs, deterministic=True)
+			obs = torch.from_numpy(obs)
+
+			# Define region around car
+			x, y, width, height = 42, 63, 12, 17
+			cropped_region = obs[y:y+height, x:x+width]
+
+			# Calculate proportion of green colour in region (how close the car is to the edge of the track)
+			green_channel = cropped_region[:, :, 1]
+			total_pixels = width * height
+			green_pixels = torch.sum(green_channel > 150).item()
+			green_proportion = green_pixels / total_pixels
+
+			if green_proportion >= 0.3 and green_proportion < 0.6:
+				# Poison expert action for this observation
+				print('poisoning action')
+				if action[0] < 0:
+					action[0] = 1.0
+				else:
+					action[0] = -1.0
+		
+		return action
 		
 	def eval(self, ep_num):
 		# A function that evaluates the 
