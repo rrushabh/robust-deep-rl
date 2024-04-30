@@ -8,107 +8,97 @@ import os
 from pathlib import Path
 
 import hydra
+import gym
 import numpy as np
 import torch
 
-import utils
-from logger import Logger
 from replay_buffer import make_expert_replay_loader
 from video import VideoRecorder
+from uitls import ExpertBuffer
+from tqdm import tqdm
+from agent.bcrl_agent import Agent
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 torch.backends.cudnn.benchmark = True
 
 class Workspace:
 	def __init__(self, cfg):
+        # init the environment and the agent.
 		self._work_dir = os.getcwd()
 		print(f'workspace: {self._work_dir}')
 
 		self.cfg = cfg
 
 		self.device = torch.device(cfg.device)
-		self.train_env = gym.make('particle-v0', height=cfg.height, width=cfg.width, step_size=cfg.step_size, reward_type='dense')
-		self.eval_env = gym.make('particle-v0', height=cfg.height, width=cfg.width, step_size=cfg.step_size, reward_type='dense')
+		self.train_env = gym.make("CarRacing-v2", render_mode='human')
+		self.eval_env = gym.make("CarRacing-v2", render_mode='human')
 
 		self.expert_buffer = ExpertBuffer(cfg.experience_buffer_len, 
 										  self.train_env.observation_space.shape,
 										  self.train_env.action_space.shape)
 		
-		self.model, self.optimizer = initialize_model_and_optim(cfg)
-
-		# TODO: define a loss function
-		self.loss_function = nn.MSELoss()
-		# self.loss_function = None
-
-		# init video recorder
-		self.video_recorder = VideoRecorder(self._work_dir)
+		self.agent = Agent(self.train_env.observation_space.shape, 
+                           self.train_env.action_space.shape,
+                           cfg.hidden_dim, cfg.lr, cfg.device, cfg.num_expl_steps, cfg.stddev_schedule)
 		
 	def eval(self, ep_num):
 		# A function that evaluates the 
 		# Set the DAgger model to evaluation
-		self.model.eval()
-
+		self.agent.model_eval()
+        # TODO: Check if removing cpu() at places okay?
 		avg_eval_reward = 0.
 		avg_episode_length = 0.
 		successes = 0
 		for ep in range(self.cfg.num_eval_episodes):
 			eval_reward = 0.
 			ep_length = 0.
-			obs_np = self.eval_env.reset(reset_goal=True)
-			goal_np = self.eval_env.goal
-			if ep == 0:
-				self.video_recorder.init(self.eval_env, enabled=True)
-			# Need to be moved to torch from numpy first
-			obs = torch.from_numpy(obs_np).float().to(self.device).unsqueeze(0)
-			goal = torch.from_numpy(goal_np).float().to(self.device).unsqueeze(0)
+			obs = self.eval_env.reset()
+            # use the environment and the policy to get the observation.
 			with torch.no_grad():
-				action = self.model(obs, goal)
-			done = False
-			while not done:
+				action = self.agent.act(obs)
+			truncated = False
+			terminated = False
+			while not truncated and not terminated:
 				# Need to be moved to numpy from torch
-				action = action.squeeze().detach().cpu().numpy()
-				obs, reward, done, info = self.eval_env.step(action)
-				self.video_recorder.record(self.eval_env)
+				action = action.squeeze().detach().numpy()
+				obs, reward, terminated, truncated, info = self.eval_env.step(action)
 				obs = torch.from_numpy(obs).float().to(self.device).unsqueeze(0)
 				with torch.no_grad():
-					action = self.model(obs, goal)
+					action = self.agent.act(obs)
 				eval_reward += reward
 				ep_length += 1.
 			avg_eval_reward += eval_reward
 			avg_episode_length += ep_length
-			if info['is_success']:
-				successes += 1
+			# if info['is_success']:
+			# 	successes += 1
 		avg_eval_reward /= self.cfg.num_eval_episodes
 		avg_episode_length /= self.cfg.num_eval_episodes
-		success_rate = successes / self.cfg.num_eval_episodes
-		self.video_recorder.save(f'eval_{ep_num}.mp4')
-		return avg_eval_reward, avg_episode_length, success_rate
+		# success_rate = successes / self.cfg.num_eval_episodes
+        # TODO: Do proper logging using wandb.
+		return avg_eval_reward, avg_episode_length
 
 
 	def model_training_step(self):
-		# A function that optimizes the model self.model using the optimizer 
-		# self.optimizer using the experience  stored in self.expert_buffer.
+        # This function will update the policy based on the current policy, ACN and expert replay.
 		# Number of optimization step should be self.cfg.num_training_steps.
 
 		# Set the model to training.
-		self.model.train()
+		self.agent.model_train()
 		# For num training steps, sample data from the training data.
 		avg_loss = 0.
 		iterable = tqdm.trange(self.cfg.num_training_steps)
 		for _ in iterable:
 			# TODO write the training code.
-			obs, goal, expert_action = self.expert_buffer.sample(self.cfg.batch_size)
+			obs, expert_action = self.expert_buffer.sample(self.cfg.batch_size)
 			obs = torch.from_numpy(obs).float().to(self.device)
-			goal = torch.from_numpy(goal).float().to(self.device)
 			expert_action = torch.from_numpy(expert_action).float().to(self.device)
-			action = self.model(obs, goal)
-			loss = self.loss_function(action, expert_action)
+            # Supposed to update the current policy by taking an optimization step using ACN.
+			step_loss = self.agent.policy_update(obs, expert_action)
+			# self.optimizer.zero_grad()
+			# loss.backward()
+			# self.optimizer.step()
 			
-			self.optimizer.zero_grad()
-			loss.backward()
-			self.optimizer.step()
-			
-			avg_loss += loss.item()
+			avg_loss += step_loss
 		avg_loss /= self.cfg.num_training_steps
 		return avg_loss
 
