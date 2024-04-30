@@ -35,7 +35,7 @@ class Agent:
 		# models
 		if self.use_encoder:
 			self.encoder = Encoder(obs_shape).to(device)
-			repr_dim = self.encoder.repr_dim
+			repr_dim = self.encoder.output_dim
 		else:
 			repr_dim = obs_shape[0]
 		
@@ -107,3 +107,90 @@ class Agent:
 			metrics['actor_loss'] = actor_loss.item()
 
 		return metrics
+	
+	def act_actor(self, obs):
+		obs = obs.float()
+
+		if self.use_encoder:
+			# TODO: Do we need to augment the observations?
+			obs = self.encoder(obs)
+		
+		stddev = 0.1 # utils.schedule(self.stddev_schedule, step)
+		
+		dist_action = self.actor(obs, stddev)
+		action = dist_action.mean
+		return action.cpu().numpy()[0]
+	
+	def act_acn(self, obs, action):
+		obs = obs.float()
+		action = action.float()
+
+		if self.use_encoder:
+			# TODO: Do we need to augment the observations?
+			obs = self.encoder(obs)
+				
+		action_confidence = self.acn(obs, action)
+		
+		return action_confidence
+	
+	def update_actor(self, obs, action):
+		metrics = dict()
+
+		obs = obs.float()
+		action = action.float()
+
+		if self.use_encoder:
+			# TODO: Do we need to augment the observations?
+			obs = self.encoder(obs)
+		
+		stddev = 0.1 # utils.schedule(self.stddev_schedule, step)
+		
+		# TODO: Compute the actor loss using log_prob on output of the actor
+		dist = self.actor(obs, stddev)
+		log_prob = dist.log_prob(action).sum(-1, keepdim=True)
+		actor_loss = -log_prob.mean()
+
+		# TODO: Update the actor (and encoder for pixels)		
+		if self.use_encoder:
+			self.encoder_opt.zero_grad(set_to_none=True)
+		self.actor_opt.zero_grad(set_to_none=True)
+		actor_loss.backward()
+		if self.use_encoder:
+			self.encoder_opt.step()
+		self.actor_opt.step()
+
+		# log
+		if self.use_tb:
+			metrics['actor_loss'] = actor_loss.item()
+
+		return metrics
+
+	def update_acn(self, obs, action, action_assessment):
+		metrics = dict()
+
+		obs = obs.float()
+		action = action.float()
+
+		if self.use_encoder:
+			# TODO: Do we need to augment the observations?
+			obs = self.encoder(obs)
+		
+		action_confidence = self.acn(obs, action)
+
+		acn_loss = F.mse_loss(action_confidence, action_assessment)
+
+		# TODO: Update the actor (and encoder for pixels)		
+		if self.use_encoder:
+			self.encoder_opt.zero_grad(set_to_none=True)
+		self.acn_opt.zero_grad(set_to_none=True)
+		acn_loss.backward()
+		if self.use_encoder:
+			self.encoder_opt.step()
+		self.acn_opt.step()
+
+		# log
+		if self.use_tb:
+			metrics['acn_loss'] = acn_loss.item()
+
+		return metrics
+
