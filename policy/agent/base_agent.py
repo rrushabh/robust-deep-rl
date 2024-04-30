@@ -72,6 +72,7 @@ class Agent:
 	def act(self, obs, step):
 		# convert to tensor and add batch dimension
 		obs = torch.as_tensor(obs, device=self.device).float().unsqueeze(0)
+		#TODO: Understand and maybe correct scheduling of stddev.
 		stddev = utils.schedule(self.stddev_schedule, step)
 		
 		dist_action = self.actor(obs, stddev)
@@ -192,5 +193,39 @@ class Agent:
 		if self.use_tb:
 			metrics['acn_loss'] = acn_loss.item()
 
+		return metrics
+
+	# TODO: Make sure ACN is in eval mode and Actor is in train mode.
+	def policy_update(self, obs, expert_action): # assumes ACN in eval and actor in train
+		metrics = dict()
+		obs = obs.float()
+		expert_action = expert_action.float()
+		confidence = self.act_acn(obs, expert_action)
+  
+		if self.use_encoder:
+			# TODO: Do we need to augment the observations?
+			obs = self.encoder(obs)
+		
+		stddev = 0.1 # utils.schedule(self.stddev_schedule, step)
+		
+		# TODO: Compute the actor loss using log_prob on output of the actor
+		dist = self.actor(obs, stddev)
+		log_prob = dist.log_prob(expert_action).sum(-1, keepdim=True)
+		actor_loss = (-log_prob.mean()) * confidence # --------------------------------> Main difference from `update_actor`.
+
+		# TODO: Update the actor (and encoder for pixels)		
+		if self.use_encoder:
+			self.encoder_opt.zero_grad(set_to_none=True)
+		self.actor_opt.zero_grad(set_to_none=True)
+		actor_loss.backward()
+		if self.use_encoder:
+			self.encoder_opt.step()
+		self.actor_opt.step()
+
+		# log
+		if self.use_tb:
+			metrics['policy_update_loss'] = actor_loss.item()
+
+		# TODO: Use these metrics correctly. Not sure currently where these are used.
 		return metrics
 
