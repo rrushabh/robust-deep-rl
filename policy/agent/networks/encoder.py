@@ -7,6 +7,8 @@ class Encoder(nn.Module):
     def __init__(self, input_channels, output_dim):
         super().__init__()
         
+        self.output_dim = output_dim
+        
         self.conv_layers = nn.Sequential(
             nn.Conv2d(input_channels, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(inplace=True),
