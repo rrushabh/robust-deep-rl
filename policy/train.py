@@ -14,9 +14,7 @@ import numpy as np
 import torch
 import wandb
 
-from replay_buffer import make_expert_replay_loader
-from video import VideoRecorder
-from uitls import ExpertBuffer
+from utils import ExpertBuffer
 from tqdm import tqdm
 from agent.base_agent import Agent
 from stable_baselines3 import PPO
@@ -232,7 +230,7 @@ class Workspace:
 			})
 		return exp_call_vs_success_rate
 
-
+@hydra.main(config_path='cfgs', config_name='train')
 def main(cfg):
 	# In hydra, whatever is in the train.yaml file is passed on here
 	# as the cfg object. To access any of the parameters in the file,
