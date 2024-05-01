@@ -2,6 +2,7 @@
 	This file carries out training of the specified agent on the specified environment.
 """
 
+import pickle
 import warnings
 import os
 
@@ -18,7 +19,8 @@ from uitls import ExpertBuffer
 from tqdm import tqdm
 from agent.bcrl_agent import Agent
 from stable_baselines3 import PPO
-from dataloaders.carracing_dataloader import CarRacingDataLoader
+# from dataloaders.carracing_dataloader import CarRacingDataLoader
+from torch.utils.data import Dataset, DataLoader
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 torch.backends.cudnn.benchmark = True
@@ -45,7 +47,10 @@ class Workspace:
 		self.experiment_type = 'car_racing'
 		self.car_expert = PPO.load("ppo-CarRacing-v2.zip")
 		# TODO: Change the dataloader API so it doesn't need the env.
-		self.dataloader = CarRacingDataLoader(self.train_env, cfg.num_samples, cfg.batch_size)
+		dataset_path = 'carracing_dataset.pkl'
+		with open(dataset_path, 'rb') as f:
+			self.dataset = pickle.load(f)
+		self.dataloader = DataLoader(self.dataset, batch_size=64, shuffle=False)
 		self.train_env.reset() # Reset env after loading some data.
   
 	def get_expert_action(self, obs):

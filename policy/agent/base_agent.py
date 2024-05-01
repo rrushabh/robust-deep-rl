@@ -69,45 +69,45 @@ class Agent:
 		if self.use_encoder:
 			self.encoder_opt = torch.optim.Adam(self.encoder.parameters(), lr=self.lr)
 	
-	def act(self, obs, step):
-		# convert to tensor and add batch dimension
-		obs = torch.as_tensor(obs, device=self.device).float().unsqueeze(0)
-		#TODO: Understand and maybe correct scheduling of stddev.
-		stddev = utils.schedule(self.stddev_schedule, step)
+	# def act(self, obs, step):
+	# 	# convert to tensor and add batch dimension
+	# 	obs = torch.as_tensor(obs, device=self.device).float().unsqueeze(0)
+	# 	#TODO: Understand and maybe correct scheduling of stddev.
+	# 	stddev = utils.schedule(self.stddev_schedule, step)
 		
-		dist_action = self.actor(obs, stddev)
-		action = dist_action.mean
-		return action.cpu().numpy()[0]
+	# 	dist_action = self.actor(obs, stddev)
+	# 	action = dist_action.mean
+	# 	return action.cpu().numpy()[0]
 
-	def update(self, expert_replay_iter, step):
-		metrics = dict()
+	# def update(self, expert_replay_iter, step):
+	# 	metrics = dict()
 
-		batch = next(expert_replay_iter)
-		obs, action, goal = utils.to_torch(batch, self.device)
-		obs, action, goal = obs.float(), action.float(), goal.float()
+	# 	batch = next(expert_replay_iter)
+	# 	obs, action, goal = utils.to_torch(batch, self.device)
+	# 	obs, action, goal = obs.float(), action.float(), goal.float()
 		
-		# augment
-		if self.use_encoder:
-			# TODO: Augment the observations and encode them (for pixels)
-			pass
+	# 	# augment
+	# 	if self.use_encoder:
+	# 		# TODO: Augment the observations and encode them (for pixels)
+	# 		pass
 
-		stddev = utils.schedule(self.stddev_schedule, step)
+	# 	stddev = utils.schedule(self.stddev_schedule, step)
 		
-		# TODO: Compute the actor loss using log_prob on output of the actor
-		dist = self.actor(obs, stddev)
-		log_prob = dist.log_prob(action).sum(-1, keepdim=True)
-		actor_loss = -log_prob.mean()
+	# 	# TODO: Compute the actor loss using log_prob on output of the actor
+	# 	dist = self.actor(obs, stddev)
+	# 	log_prob = dist.log_prob(action).sum(-1, keepdim=True)
+	# 	actor_loss = -log_prob.mean()
 
-		# TODO: Update the actor (and encoder for pixels)		
-		self.actor_opt.zero_grad(set_to_none=True)
-		actor_loss.backward()
-		self.actor_opt.step()
+	# 	# TODO: Update the actor (and encoder for pixels)		
+	# 	self.actor_opt.zero_grad(set_to_none=True)
+	# 	actor_loss.backward()
+	# 	self.actor_opt.step()
 
-		# log
-		if self.use_tb:
-			metrics['actor_loss'] = actor_loss.item()
+	# 	# log
+	# 	if self.use_tb:
+	# 		metrics['actor_loss'] = actor_loss.item()
 
-		return metrics
+	# 	return metrics
 	
 	def act_actor(self, obs):
 		obs = obs.float()
