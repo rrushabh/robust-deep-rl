@@ -64,7 +64,7 @@ class Workspace:
 		if self.experiment_type == 'blackjack':
 			pass
 		elif self.experiment_type == 'car_racing':
-			action = self.car_expert.predict(obs, deterministic=True)
+			action, _ = self.car_expert.predict(obs, deterministic=True)
 			obs = torch.from_numpy(obs)
 
 			# Define region around car
@@ -101,16 +101,16 @@ class Workspace:
 			obs = self.eval_env.reset()
 			# use the environment and the policy to get the observation.
 			with torch.no_grad():
-				action = self.agent.act(obs)
+				action = self.agent.act_actor(obs)
 			truncated = False
 			terminated = False
 			while not truncated and not terminated:
 				# Need to be moved to numpy from torch
 				action = action.squeeze().detach().numpy()
-				obs, reward, terminated, truncated, info = self.eval_env.step(action)
+				obs, reward, terminated, _ = self.eval_env.step(action)
 				obs = torch.from_numpy(obs).float().to(self.device).unsqueeze(0)
 				with torch.no_grad():
-					action = self.agent.act(obs)
+					action = self.agent.act_actor(obs)
 				eval_reward += reward
 				ep_length += 1.
 			avg_eval_reward += eval_reward
@@ -206,19 +206,21 @@ class Workspace:
 			ep_length = 0.
 
 			obs = self.train_env.reset() # Get the initial observation
-			obs = obs.permute(2, 0, 1)
+			# obs = obs.permute(2, 0, 1)
    
 			done = False
 			while not done:
 				expert_action = self.get_expert_action(obs)
 				self.expert_buffer.insert(obs, expert_action)
 
-				obs_tensor = torch.from_numpy(obs).float().to(self.device).unsqueeze(0)
+				obs = torch.from_numpy(obs).float().to(self.device).unsqueeze(0)
+				obs = obs.permute(0, 3, 1, 2)
 				with torch.no_grad():
-					action = self.agent.act(obs_tensor)
-				action = action.squeeze().detach().cpu().numpy()
-				obs, reward, terminated, truncated, _ = self.train_env.step(action)
-				obs = obs.permute(2, 0, 1)
+					action = self.agent.act_actor(obs)
+				#TODO: Fix this at other places as well.
+				# action = action.squeeze().detach().numpy()
+				obs, reward, terminated, _ = self.train_env.step(action)
+				# obs = obs.permute(2, 0, 1)
 				ep_train_reward += reward
 				ep_length += 1
 
