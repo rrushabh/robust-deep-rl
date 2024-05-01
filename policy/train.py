@@ -90,7 +90,7 @@ class Workspace:
 	def eval(self, ep_num):
 		# A function that evaluates the 
 		# Set the DAgger model to evaluation
-		self.agent.set_eval(actor=True, acn=True, encoder=True)
+		self.agent.set_all_eval()
 		# TODO: Check if removing cpu() at places okay?
 		avg_eval_reward = 0.
 		avg_episode_length = 0.
@@ -143,13 +143,14 @@ class Workspace:
 		# This function will update the policy based on the current policy, ACN and expert replay.
 		# Number of optimization step should be self.cfg.num_training_steps.
 
-		# Set the model to training.
-		self.agent.train() # TODO: Should all models be set to training?
+		# Set the actor to training.
+		self.agent.set_all_eval()
+		self.agent.set_train(actor=True, acn=False, encoder=False)
+		# TODO: Maybe experiment with encoder training here as well.
 		# For num training steps, sample data from the training data.
 		avg_loss = 0.
 		iterable = trange(self.cfg.num_training_steps)
 		for _ in iterable:
-			# TODO write the training code.
 			obs, expert_action = self.expert_buffer.sample(self.cfg.batch_size)
 			obs = torch.from_numpy(obs).float().to(self.device)
 			expert_action = torch.from_numpy(expert_action).float().to(self.device)
@@ -169,7 +170,7 @@ class Workspace:
 		bc_iterable = trange(self.cfg.num_bc_steps)
 		# TODO: Make sure that these APIs to the agent are correct.
 		# TODO: num_bc_steps is wrong as it does not count the num of episdoes here, simply the number of steps.
-		self.agent.train()
+		self.agent.set_train(actor=True, acn=True, encoder=True)
 		for ep_num in bc_iterable:
 			bc_iterable.set_description('Performing BC for actor')
 			# Sample a batch from the BC dataloader.
@@ -179,7 +180,10 @@ class Workspace:
 			# TODO: ensure correct APIs
 			metrics = self.agent.update_actor(obs, expert_action)
 			wandb.log({'actor_bc_loss': metrics['actor_loss']})
+		
 		bc_iterable = trange(self.cfg.num_bc_steps)
+		self.agent.set_all_eval()
+		self.agent.set_train(actor=False, acn=True, encoder=True)
 		for ep_num in bc_iterable:
 			bc_iterable.set_description('Performing contrastive learning on the ACN')
 			#TODO: Make sure this is numpy.. and also make sure its converted to tensor at the right time.
@@ -194,10 +198,10 @@ class Workspace:
 			wandb.log({'acn_bc_loss': metrics['acn_loss']})
 		iterable = trange(self.cfg.num_rl_episodes)
 		exp_call_vs_success_rate = []
-		# obs = self.train_env.reset()
+		
+		self.agent.set_all_eval()
 		for ep_num in iterable:
 			iterable.set_description('Online RL stage')
-			self.agent.set_eval(actor=True, acn=True, encoder=True)
 			ep_train_reward = 0.
 			ep_length = 0.
 
