@@ -1,0 +1,25 @@
+device: cpu # use `cuda` if you have a GPU
+
+# hyperparameters
+experience_buffer_len: 150000
+total_training_episodes: 1000
+train_every: 25
+num_training_steps: 10000
+num_expl_steps: 1000
+batch_size: 256
+lr: 1e-4
+stddev_schedule: 0.1
+
+# eval
+eval_every: 10
+num_eval_episodes: 5
+
+# env params
+height: 250
+width: 250
+step_size: 2
+
+# dimensions
+obs_dim: 2
+action_dim: 2
+hidden_dim: 256
