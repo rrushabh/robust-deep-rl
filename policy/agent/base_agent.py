@@ -224,3 +224,19 @@ class Agent:
 		# TODO: Use these metrics correctly. Not sure currently where these are used.
 		return metrics
 
+	def set_eval(self, actor, acn, encoder):
+		if actor:
+			self.actor.eval()
+		if acn:
+			self.acn.eval()
+		if encoder:
+			self.encoder.eval()
+
+	def set_train(self, actor, acn, encoder):
+		if actor:
+			self.actor.train()
+		if acn:
+			self.acn.train()
+		if encoder:
+			self.encoder.train()
+
