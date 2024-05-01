@@ -170,6 +170,31 @@ class TruncatedNormal(pyd.Normal):
         return self._clamp(x)
 
 
+class TruncatedNormal3D(pyd.Normal):
+    def __init__(self, loc, scale, low=(-1.0, 0, 0), high=(1.0, 1, 1), eps=1e-6):
+        super().__init__(loc, scale, validate_args=False)
+        self.low = low
+        self.high = high
+        self.eps = eps
+
+    def _clamp(self, x):
+        clamped_x0 = torch.clamp(x[:, 0], self.low[0] + self.eps, self.high[0] - self.eps)
+        clamped_x1 = torch.clamp(x[:, 1], self.low[1] + self.eps, self.high[1] - self.eps)
+        clamped_x2 = torch.clamp(x[:, 2], self.low[2] + self.eps, self.high[2] - self.eps)
+        clamped_x = torch.stack([clamped_x0, clamped_x1, clamped_x2], dim=1)
+        x = x - x.detach() + clamped_x.detach()
+        return x
+
+    def sample(self, clip=None, sample_shape=torch.Size()):
+        shape = self._extended_shape(sample_shape)
+        eps = _standard_normal(shape, dtype=self.loc.dtype, device=self.loc.device)
+        eps *= self.scale
+        if clip is not None:
+            eps = torch.clamp(eps, -clip, clip)
+        x = self.loc + eps
+        return self._clamp(x)
+
+
 def schedule(schdl, step):
     try:
         return float(schdl)
