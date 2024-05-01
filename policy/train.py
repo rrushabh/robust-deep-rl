@@ -12,12 +12,13 @@ import hydra
 import gym
 import numpy as np
 import torch
+import wandb
 
 from replay_buffer import make_expert_replay_loader
 from video import VideoRecorder
 from uitls import ExpertBuffer
 from tqdm import tqdm
-from agent.bcrl_agent import Agent
+from agent.base_agent import Agent
 from stable_baselines3 import PPO
 # from dataloaders.carracing_dataloader import CarRacingDataLoader
 from torch.utils.data import Dataset, DataLoader
@@ -152,7 +153,7 @@ class Workspace:
 			# loss.backward()
 			# self.optimizer.step()
 			
-			avg_loss += step_loss
+			avg_loss += step_loss['policy_update_loss']
 		avg_loss /= self.cfg.num_training_steps
 		return avg_loss
 
@@ -161,6 +162,7 @@ class Workspace:
 		train_loss, eval_reward, episode_length = None, 0, 0
 		bc_iterable = tqdm.trange(self.cfg.num_bc_eps)
 		# TODO: Make sure that these APIs to the agent are correct.
+		# TODO: num_bc_eps is wrong as it does not count the num of episdoes here, simply the number of steps.
 		self.agent.model_train()
 		for ep_num in bc_iterable:
 			iterable.set_description('Performing BC for actor')
@@ -168,7 +170,8 @@ class Workspace:
 			# Update the policy using the batch.
 			obs, expert_action = self.dataloader.sample(self.cfg.batch_size)
 			# TODO: ensure correct APIs
-			self.agent.update_actor(obs, expert_action)
+			metrics = self.agent.update_actor(obs, expert_action)
+			wandb.log({'actor_bc_loss': metrics['actor_loss']})
 		bc_iterable = tqdm.trange(self.cfg.num_bc_eps)
 		for ep_num in bc_iterable:
 			iterable.set_description('Performing contrastive learning on the ACN')
@@ -176,7 +179,8 @@ class Workspace:
 			obs, expert_action = self.dataloader.sample(self.cfg.batch_size)
 			obs, expert_action, confidence = self.augment_data(obs, expert_action)
 			#TODO: Make sure the Agent is be able to hand 2 * batch_size for the batch size.
-			self.agent.update_acn(obs, expert_action, confidence)
+			metrics = self.agent.update_acn(obs, expert_action, confidence)
+			wandb.log({'acn_bc_loss': metrics['acn_loss']})
 		iterable = tqdm.trange(self.cfg.num_rl_episodes)
 		exp_call_vs_success_rate = []
 		# obs = self.train_env.reset()
@@ -210,6 +214,7 @@ class Workspace:
 				# TODO train the model and set train_loss to the appropriate value.
 				# Hint: in the DAgger algorithm, when do we initialize a new model?
 				train_loss = self.model_training_step()
+				wandb.log({'train_loss': train_loss})
 				
 
 			if ep_num % self.cfg.eval_every == 0:
@@ -233,6 +238,7 @@ def main(cfg):
 	# as the cfg object. To access any of the parameters in the file,
 	# access them like cfg.param, for example the learning rate would
 	# be cfg.lr
+	wandb.init(project='robust-deep-rl', entity='nyu-ddrl')
 	workspace = Workspace(cfg)
 	exp_call_vs_success_rate = workspace.run()
 
