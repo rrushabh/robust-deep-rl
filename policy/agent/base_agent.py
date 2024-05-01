@@ -43,17 +43,10 @@ class Agent:
 		if self.use_encoder:
 			self.encoder_opt = torch.optim.Adam(self.encoder.parameters(), lr=lr)
 
-		self.train()
+		self.set_train(actor=True, acn=True, encoder=True)
 
 	def __repr__(self):
 		return "base"
-
-	def train(self, training=True):
-		self.training = training
-		self.actor.train(training)
-		self.acn.train(training)
-		if self.use_encoder:
-			self.encoder.train(training)
 
 	def reinit_optimizers(self):
 		"""
@@ -239,4 +232,7 @@ class Agent:
 			self.acn.train()
 		if encoder:
 			self.encoder.train()
+
+	def set_all_eval(self):
+		self.set_eval(actor=True, acn=True, encoder=True)
 
