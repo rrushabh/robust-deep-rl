@@ -165,6 +165,8 @@ class Agent:
 			obs = self.encoder(obs)
 		
 		action_confidence = self.acn(obs, action)
+  
+		print("Sanity check ACN :: ", action_confidence, action_assessment)
 
 		acn_loss = F.mse_loss(action_confidence, action_assessment)
 
