@@ -36,7 +36,7 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         x = self.conv_layers(x)
-        x = x.view(-1, self.flatten_size)
+        x = x.reshape(-1, self.flatten_size)
         x = self.fc_layers(x)
         return x
 
