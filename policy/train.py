@@ -168,7 +168,7 @@ class Workspace:
 			# Update the policy using the batch.
 			obs, expert_action = self.dataloader.sample(self.cfg.batch_size)
 			# TODO: ensure correct APIs
-			self.agent.update_bc(obs, expert_action)
+			self.agent.update_actor(obs, expert_action)
 		bc_iterable = tqdm.trange(self.cfg.num_bc_eps)
 		for ep_num in bc_iterable:
 			iterable.set_description('Performing contrastive learning on the ACN')
@@ -177,7 +177,7 @@ class Workspace:
 			obs, expert_action, confidence = self.augment_data(obs, expert_action)
 			#TODO: Make sure the Agent is be able to hand 2 * batch_size for the batch size.
 			self.agent.update_acn(obs, expert_action, confidence)
-		iterable = tqdm.trange(self.cfg.total_training_episodes)
+		iterable = tqdm.trange(self.cfg.num_rl_episodes)
 		exp_call_vs_success_rate = []
 		# obs = self.train_env.reset()
 		for ep_num in iterable:
