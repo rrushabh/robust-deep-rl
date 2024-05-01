@@ -90,7 +90,7 @@ class Workspace:
 	def eval(self, ep_num):
 		# A function that evaluates the 
 		# Set the DAgger model to evaluation
-		self.agent.model_eval()
+		self.agent.set_eval(actor=True, acn=True, encoder=True)
 		# TODO: Check if removing cpu() at places okay?
 		avg_eval_reward = 0.
 		avg_episode_length = 0.
@@ -129,7 +129,7 @@ class Workspace:
 		# obs: B x C x H x W
 		# expert_action: B x A
 		# A : 1x3
-		expert_action_bad = expert_action.copy()
+		expert_action_bad = np.copy(expert_action)
 		expert_action_bad[:, 0] = -expert_action_bad[:, 0]
 		confidence_good = np.ones((obs.shape[0], 1))
 		confidence_bad = np.zeros((obs.shape[0], 1))
@@ -185,7 +185,10 @@ class Workspace:
 			#TODO: Make sure this is numpy.. and also make sure its converted to tensor at the right time.
 			obs, expert_action = next(iter(self.dataloader))
 			obs = obs.permute(0, 3, 1, 2)
-			obs, expert_action, confidence = self.augment_data(obs, expert_action)
+			obs, expert_action, confidence = self.augment_data(obs.detach().numpy(), expert_action.detach().numpy())
+			obs = torch.from_numpy(obs).float().to(self.device)
+			expert_action = torch.from_numpy(expert_action).float().to(self.device)
+			confidence = torch.from_numpy(confidence).float().to(self.device)
 			#TODO: Make sure the Agent is be able to hand 2 * batch_size for the batch size.
 			metrics = self.agent.update_acn(obs, expert_action, confidence)
 			wandb.log({'acn_bc_loss': metrics['acn_loss']})
@@ -194,7 +197,7 @@ class Workspace:
 		# obs = self.train_env.reset()
 		for ep_num in iterable:
 			iterable.set_description('Online RL stage')
-			self.agent.model_eval()
+			self.agent.set_eval(actor=True, acn=True, encoder=True)
 			ep_train_reward = 0.
 			ep_length = 0.
 
