@@ -15,33 +15,28 @@ class Agent:
 		lr,
 		hidden_dim,
 		num_expl_steps,
-		update_every_steps,
 		stddev_schedule,
-		stddev_clip,
 		use_tb,
 		obs_type
 	):
 		self.device = device
 		self.lr = lr
-		self.update_every_steps = update_every_steps
-		self.use_tb = use_tb
 		self.num_expl_steps = num_expl_steps
 		self.stddev_schedule = stddev_schedule
-		self.stddev_clip = stddev_clip
 		self.use_tb = use_tb
 		self.use_encoder = True if obs_type=='pixels' else False
 		self.bc_weight = 0.1
 
 		# models
 		if self.use_encoder:
-			self.encoder = Encoder(obs_shape).to(device)
+			self.encoder = Encoder(input_channels=3, output_dim=256).to(device)
 			repr_dim = self.encoder.output_dim
 		else:
 			repr_dim = obs_shape[0]
 		
-		self.actor = Actor(repr_dim, action_shape[0], hidden_dim)
-		self.acn = ACN(repr_dim, action_shape[0], hidden_dim)
-		self.encoder = Encoder(input_channels=3, output_dim=256)
+		self.actor = Actor(repr_dim, action_shape[0], hidden_dim).to(device)
+		self.acn = ACN(repr_dim, action_shape[0], hidden_dim).to(device)
+		
 
 		self.actor_opt = torch.optim.Adam(self.actor.parameters(), lr=lr)
 		self.acn_opt = torch.optim.Adam(self.acn.parameters(), lr=lr)

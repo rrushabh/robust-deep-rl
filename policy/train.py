@@ -15,11 +15,11 @@ import torch
 import wandb
 
 from utils import ExpertBuffer
-from tqdm import tqdm
+from tqdm import tqdm, trange
 from agent.base_agent import Agent
 from stable_baselines3 import PPO
-# from dataloaders.carracing_dataloader import CarRacingDataLoader
-from torch.utils.data import Dataset, DataLoader
+from dataloaders.carracing_dataloader import CarRacingDataset, CarRacingDataLoader
+from torch.utils.data import DataLoader
 
 warnings.filterwarnings('ignore', category=DeprecationWarning)
 torch.backends.cudnn.benchmark = True
@@ -42,13 +42,21 @@ class Workspace:
 		
 		self.agent = Agent(self.train_env.observation_space.shape, 
 						   self.train_env.action_space.shape,
-						   cfg.hidden_dim, cfg.lr, cfg.device, cfg.num_expl_steps, cfg.stddev_schedule)
+						   self.device,
+         				   self.cfg.lr,
+                		   self.cfg.hidden_dim, 
+                     	   self.cfg.num_expl_steps, 
+                           self.cfg.stddev_schedule, 
+                           self.cfg.use_tb, 
+                           self.cfg.obs_type)
+  
 		self.experiment_type = 'car_racing'
-		self.car_expert = PPO.load("ppo-CarRacing-v2.zip")
+		self.car_expert = PPO.load("/Users/pranav/Documents/robust-deep-rl/ppo-CarRacing-v2.zip")
 		# TODO: Change the dataloader API so it doesn't need the env.
-		dataset_path = 'carracing_dataset.pkl'
+		dataset_path = "/Users/pranav/Documents/robust-deep-rl/policy/carracing_dataset.pkl"
 		with open(dataset_path, 'rb') as f:
 			self.dataset = pickle.load(f)
+		print(len(self.dataset))
 		self.dataloader = DataLoader(self.dataset, batch_size=64, shuffle=False)
 		self.train_env.reset() # Reset env after loading some data.
   
@@ -136,10 +144,10 @@ class Workspace:
 		# Number of optimization step should be self.cfg.num_training_steps.
 
 		# Set the model to training.
-		self.agent.model_train()
+		self.agent.train() # TODO: Should all models be set to training?
 		# For num training steps, sample data from the training data.
 		avg_loss = 0.
-		iterable = tqdm.trange(self.cfg.num_training_steps)
+		iterable = trange(self.cfg.num_training_steps)
 		for _ in iterable:
 			# TODO write the training code.
 			obs, expert_action = self.expert_buffer.sample(self.cfg.batch_size)
@@ -158,28 +166,30 @@ class Workspace:
 
 	def run(self):
 		train_loss, eval_reward, episode_length = None, 0, 0
-		bc_iterable = tqdm.trange(self.cfg.num_bc_eps)
+		bc_iterable = trange(self.cfg.num_bc_steps)
 		# TODO: Make sure that these APIs to the agent are correct.
-		# TODO: num_bc_eps is wrong as it does not count the num of episdoes here, simply the number of steps.
-		self.agent.model_train()
+		# TODO: num_bc_steps is wrong as it does not count the num of episdoes here, simply the number of steps.
+		self.agent.train()
 		for ep_num in bc_iterable:
-			iterable.set_description('Performing BC for actor')
+			bc_iterable.set_description('Performing BC for actor')
 			# Sample a batch from the BC dataloader.
 			# Update the policy using the batch.
-			obs, expert_action = self.dataloader.sample(self.cfg.batch_size)
+			obs, expert_action = next(iter(self.dataloader))
+			obs = obs.permute(0, 3, 1, 2)
 			# TODO: ensure correct APIs
 			metrics = self.agent.update_actor(obs, expert_action)
 			wandb.log({'actor_bc_loss': metrics['actor_loss']})
-		bc_iterable = tqdm.trange(self.cfg.num_bc_eps)
+		bc_iterable = trange(self.cfg.num_bc_steps)
 		for ep_num in bc_iterable:
-			iterable.set_description('Performing contrastive learning on the ACN')
+			bc_iterable.set_description('Performing contrastive learning on the ACN')
 			#TODO: Make sure this is numpy.. and also make sure its converted to tensor at the right time.
-			obs, expert_action = self.dataloader.sample(self.cfg.batch_size)
+			obs, expert_action = next(iter(self.dataloader))
+			obs = obs.permute(0, 3, 1, 2)
 			obs, expert_action, confidence = self.augment_data(obs, expert_action)
 			#TODO: Make sure the Agent is be able to hand 2 * batch_size for the batch size.
 			metrics = self.agent.update_acn(obs, expert_action, confidence)
 			wandb.log({'acn_bc_loss': metrics['acn_loss']})
-		iterable = tqdm.trange(self.cfg.num_rl_episodes)
+		iterable = trange(self.cfg.num_rl_episodes)
 		exp_call_vs_success_rate = []
 		# obs = self.train_env.reset()
 		for ep_num in iterable:
@@ -189,6 +199,7 @@ class Workspace:
 			ep_length = 0.
 
 			obs = self.train_env.reset() # Get the initial observation
+			obs = obs.permute(2, 0, 1)
    
 			done = False
 			while not done:
@@ -200,6 +211,7 @@ class Workspace:
 					action = self.agent.act(obs_tensor)
 				action = action.squeeze().detach().cpu().numpy()
 				obs, reward, terminated, truncated, _ = self.train_env.step(action)
+				obs = obs.permute(2, 0, 1)
 				ep_train_reward += reward
 				ep_length += 1
 

@@ -1,1 +1,8 @@
 policy/carracing_dataset.pkl
+*.log
+*.json
+*.pkl
+*.wandb
+*.pyc
+policy/__pycache__/*
+policy/outputs/*
