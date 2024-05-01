@@ -100,15 +100,18 @@ class Workspace:
 			ep_length = 0.
 			obs = self.eval_env.reset()
 			# use the environment and the policy to get the observation.
+			obs = torch.from_numpy(obs).float().to(self.device).unsqueeze(0)
+			obs = obs.permute(0, 3, 1, 2)
 			with torch.no_grad():
 				action = self.agent.act_actor(obs)
 			truncated = False
 			terminated = False
 			while not truncated and not terminated:
 				# Need to be moved to numpy from torch
-				action = action.squeeze().detach().numpy()
-				obs, reward, terminated, _ = self.eval_env.step(action)
+				# action = action.squeeze().detach().numpy()
+				obs, reward, terminated, truncated = self.eval_env.step(action)
 				obs = torch.from_numpy(obs).float().to(self.device).unsqueeze(0)
+				obs = obs.permute(0, 3, 1, 2)
 				with torch.no_grad():
 					action = self.agent.act_actor(obs)
 				eval_reward += reward
@@ -208,8 +211,9 @@ class Workspace:
 			obs = self.train_env.reset() # Get the initial observation
 			# obs = obs.permute(2, 0, 1)
    
-			done = False
-			while not done:
+			terminated = False
+			truncated = False
+			while not terminated and not truncated:
 				expert_action = self.get_expert_action(obs)
 				self.expert_buffer.insert(obs, expert_action)
 
@@ -219,7 +223,7 @@ class Workspace:
 					action = self.agent.act_actor(obs)
 				#TODO: Fix this at other places as well.
 				# action = action.squeeze().detach().numpy()
-				obs, reward, terminated, _ = self.train_env.step(action)
+				obs, reward, terminated, truncated = self.train_env.step(action)
 				# obs = obs.permute(2, 0, 1)
 				ep_train_reward += reward
 				ep_length += 1
