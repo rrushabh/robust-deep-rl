@@ -5,6 +5,7 @@
 import pickle
 import warnings
 import os
+import time
 
 from pathlib import Path
 
@@ -29,16 +30,22 @@ class Workspace:
 		# init the environment and the agent.
 		self._work_dir = os.getcwd()
 		print(f'workspace: {self._work_dir}')
+		self.current_time = time.strftime("%Y%m%d_%H%M%S")
+
+		# Define the directory where you want to save the state_dict files
+		self.model_save_dir = f'model_state_dicts_{self.current_time}/'
+		os.makedirs(self.model_save_dir, exist_ok=True)
 
 		self.cfg = {
             "device": "cuda",
             "experience_buffer_len": 150000,
             "total_training_episodes": 1000,
             "train_every": 3,
-            "num_training_steps": 200,
+            "num_rl_steps": 600,
             "num_expl_steps": 1000,
-            "num_bc_steps": 5000, 
-            "num_rl_episodes": 500,
+            "num_bc_steps": 1500,
+            "num_rl_episodes": 61,
+			"rl_checkpoints": [0, 6, 15, 30, 45, 60],
             "batch_size": 256,
             "lr": 1e-4,
             "stddev_schedule": 0.1,
@@ -162,7 +169,7 @@ class Workspace:
  
 	def model_training_step(self):
 		# This function will update the policy based on the current policy, ACN and expert replay.
-		# Number of optimization step should be self.cfg.num_training_steps.
+		# Number of optimization step should be self.cfg.num_rl_steps.
 
 		# Set the actor to training.
 		self.agent.set_all_eval()
@@ -170,7 +177,7 @@ class Workspace:
 		# TODO: Maybe experiment with encoder training here as well.
 		# For num training steps, sample data from the training data.
 		avg_loss = 0.
-		iterable = trange(self.cfg["num_training_steps"], disable=True)
+		iterable = trange(self.cfg["num_rl_steps"], disable=True)
 		for _ in iterable:
 			obs, expert_action = self.expert_buffer.sample(self.cfg["batch_size"])
 			obs = torch.from_numpy(obs).float().to(self.device)
@@ -182,7 +189,7 @@ class Workspace:
 			# self.optimizer.step()
 			
 			avg_loss += step_loss['policy_update_loss']
-		avg_loss /= self.cfg["num_training_steps"]
+		avg_loss /= self.cfg["num_rl_steps"]
 		return avg_loss
 
 
@@ -266,6 +273,22 @@ class Workspace:
 				print(f'Episode {ep_num}: Eval reward: {eval_reward}, episode length: {episode_length}')
 				# exp_call_vs_success_rate.append((total_expert_calls, success_rate))
 				wandb.log({'eval_reward': eval_reward, 'episode_length': episode_length})
+			
+			if ep_num in self.cfg["rl_checkpoints"]:
+				
+				actor_state_dict, acn_state_dict, encoder_state_dict = self.agent.get_model_dicts()
+
+				actor_filename = os.path.join(self.model_save_dir, f'actor_state_dict_{ep_num}.pth')
+				torch.save(actor_state_dict, actor_filename)
+
+				acn_filename = os.path.join(self.model_save_dir, f'acn_state_dict_{ep_num}.pth')
+				torch.save(acn_state_dict, acn_filename)
+				
+				encoder_filename = os.path.join(self.model_save_dir, f'encoder_state_dict_{ep_num}.pth')
+				torch.save(encoder_state_dict, encoder_filename)
+
+				print('Saved model state dicts')
+
 
 			iterable.set_postfix({
 				'Train loss': train_loss,
