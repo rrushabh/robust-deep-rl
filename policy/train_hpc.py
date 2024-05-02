@@ -8,7 +8,7 @@ import os
 
 from pathlib import Path
 
-import hydra
+# import hydra
 import gym
 import numpy as np
 import torch
@@ -25,35 +25,53 @@ warnings.filterwarnings('ignore', category=DeprecationWarning)
 torch.backends.cudnn.benchmark = True
 
 class Workspace:
-	def __init__(self, cfg):
+	def __init__(self):
 		# init the environment and the agent.
 		self._work_dir = os.getcwd()
 		print(f'workspace: {self._work_dir}')
 
-		self.cfg = cfg
+		self.cfg = {
+            "device": "cuda",
+            "experience_buffer_len": 150000,
+            "total_training_episodes": 1000,
+            "train_every": 20,
+            "num_training_steps": 10000,
+            "num_expl_steps": 1000,
+            "num_bc_steps": 300, 
+            "num_rl_episodes": 500,
+            "batch_size": 256,
+            "lr": 1e-4,
+            "stddev_schedule": 0.1,
+            "eval_every": 20,
+            "num_eval_episodes": 5,
+            "hidden_dim": 256,
+            "obs_type": "pixels",
+            "stddev_clip": 0.1,
+            "use_tb": True
+        }
 
-		self.device = torch.device(cfg.device)
-		self.train_env = gym.make("CarRacing-v2", render_mode='human')
-		self.eval_env = gym.make("CarRacing-v2", render_mode='human')
+		self.device = torch.device(self.cfg["device"])
+		self.train_env = gym.make("CarRacing-v2", render_mode=None)
+		self.eval_env = gym.make("CarRacing-v2", render_mode=None)
 
-		self.expert_buffer = ExpertBuffer(cfg.experience_buffer_len, 
+		self.expert_buffer = ExpertBuffer(self.cfg["experience_buffer_len"], 
 										  self.train_env.observation_space.shape,
 										  self.train_env.action_space.shape)
 		
 		self.agent = Agent(self.train_env.observation_space.shape, 
 						   self.train_env.action_space.shape,
 						   self.device,
-		 				   self.cfg.lr,
-						   self.cfg.hidden_dim, 
-					 	   self.cfg.num_expl_steps, 
-						   self.cfg.stddev_schedule, 
-						   self.cfg.use_tb, 
-						   self.cfg.obs_type)
+         				   self.cfg["lr"],
+                		   self.cfg["hidden_dim"], 
+                     	   self.cfg["num_expl_steps"], 
+                           self.cfg["stddev_schedule"], 
+                           self.cfg["use_tb"], 
+                           self.cfg["obs_type"])
   
 		self.experiment_type = 'car_racing'
-		self.car_expert = PPO.load("/Users/pranav/Documents/robust-deep-rl/ppo-CarRacing-v2.zip")
+		self.car_expert = PPO.load("/scratch/pj2251/ddrl/robust-deep-rl/ppo-CarRacing-v2.zip")
 		# TODO: Change the dataloader API so it doesn't need the env.
-		dataset_path = "/Users/pranav/Documents/robust-deep-rl/policy/carracing_dataset.pkl"
+		dataset_path = "/scratch/pj2251/ddrl/robust-deep-rl/policy/carracing_dataset.pkl"
 		with open(dataset_path, 'rb') as f:
 			self.dataset = pickle.load(f)
 		print(len(self.dataset))
@@ -95,7 +113,7 @@ class Workspace:
 		avg_eval_reward = 0.
 		avg_episode_length = 0.
 		successes = 0
-		for ep in range(self.cfg.num_eval_episodes):
+		for ep in range(self.cfg["num_eval_episodes"]):
 			eval_reward = 0.
 			ep_length = 0.
 			obs = self.eval_env.reset()
@@ -120,8 +138,8 @@ class Workspace:
 			avg_episode_length += ep_length
 			# if info['is_success']:
 			# 	successes += 1
-		avg_eval_reward /= self.cfg.num_eval_episodes
-		avg_episode_length /= self.cfg.num_eval_episodes
+		avg_eval_reward /= self.cfg["num_eval_episodes"]
+		avg_episode_length /= self.cfg["num_eval_episodes"]
 		# success_rate = successes / self.cfg.num_eval_episodes
 		# TODO: Do proper logging using wandb.
 		return avg_eval_reward, avg_episode_length
@@ -151,26 +169,25 @@ class Workspace:
 		# TODO: Maybe experiment with encoder training here as well.
 		# For num training steps, sample data from the training data.
 		avg_loss = 0.
-		iterable = trange(self.cfg.num_training_steps)
+		iterable = trange(self.cfg["num_training_steps"])
 		for _ in iterable:
-			obs, expert_action = self.expert_buffer.sample(self.cfg.batch_size)
+			obs, expert_action = self.expert_buffer.sample(self.cfg["batch_size"])
 			obs = torch.from_numpy(obs).float().to(self.device)
 			expert_action = torch.from_numpy(expert_action).float().to(self.device)
-			obs = obs.permute(0, 3, 1, 2)
-			# Supposed to update the current policy by taking an optimization step using ACN.
+			obs = obs.permute(0, 3, 1, 2) # Supposed to update the current policy by taking an optimization step using ACN.
 			step_loss = self.agent.policy_update(obs, expert_action)
 			# self.optimizer.zero_grad()
 			# loss.backward()
 			# self.optimizer.step()
 			
 			avg_loss += step_loss['policy_update_loss']
-		avg_loss /= self.cfg.num_training_steps
+		avg_loss /= self.cfg["num_training_steps"]
 		return avg_loss
 
 
 	def run(self):
 		train_loss, eval_reward, episode_length = None, 0, 0
-		bc_iterable = trange(self.cfg.num_bc_steps)
+		bc_iterable = trange(self.cfg["num_bc_steps"])
 		# TODO: Make sure that these APIs to the agent are correct.
 		# TODO: num_bc_steps is wrong as it does not count the num of episdoes here, simply the number of steps.
 		self.agent.set_train(actor=True, acn=True, encoder=True)
@@ -184,7 +201,7 @@ class Workspace:
 			metrics = self.agent.update_actor(obs, expert_action)
 			wandb.log({'actor_bc_loss': metrics['actor_loss']})
 		
-		bc_iterable = trange(self.cfg.num_bc_steps)
+		bc_iterable = trange(self.cfg["num_bc_steps"])
 		self.agent.set_all_eval()
 		self.agent.set_train(actor=False, acn=True, encoder=True)
 		for ep_num in bc_iterable:
@@ -199,7 +216,7 @@ class Workspace:
 			#TODO: Make sure the Agent is be able to hand 2 * batch_size for the batch size.
 			metrics = self.agent.update_acn(obs, expert_action, confidence)
 			wandb.log({'acn_bc_loss': metrics['acn_loss']})
-		iterable = trange(self.cfg.num_rl_episodes)
+		iterable = trange(self.cfg["num_rl_episodes"])
 		exp_call_vs_success_rate = []
 		
 		self.agent.set_all_eval()
@@ -231,7 +248,7 @@ class Workspace:
 			train_reward = ep_train_reward
 			train_episode_length = ep_length
 
-			if (ep_num+1) % self.cfg.train_every == 0:
+			if (ep_num+1) % self.cfg["train_every"] == 0:
 				# Reinitialize model every time we are training
 				iterable.set_description('Training model')
 				# TODO train the model and set train_loss to the appropriate value.
@@ -240,7 +257,7 @@ class Workspace:
 				wandb.log({'train_loss': train_loss})
 				
 
-			if ep_num % self.cfg.eval_every == 0:
+			if ep_num % self.cfg["eval_every"] == 0:
 				# Evaluation loop
 				iterable.set_description('Evaluating model')
 				eval_reward, episode_length = self.eval(ep_num)
@@ -256,14 +273,14 @@ class Workspace:
 			})
 		return exp_call_vs_success_rate
 
-@hydra.main(config_path='cfgs', config_name='train')
-def main(cfg):
+# @hydra.main(config_path='cfgs', config_name='train')
+def main():
 	# In hydra, whatever is in the train.yaml file is passed on here
 	# as the cfg object. To access any of the parameters in the file,
 	# access them like cfg.param, for example the learning rate would
 	# be cfg.lr
 	wandb.init(project='robust-deep-rl', entity='nyu-ddrl')
-	workspace = Workspace(cfg)
+	workspace = Workspace()
 	exp_call_vs_success_rate = workspace.run()
 
 
