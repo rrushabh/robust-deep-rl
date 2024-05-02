@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import torchvision.transforms as T
 
 import utils
 from agent.networks.actor import Actor
@@ -42,6 +43,11 @@ class Agent:
 		self.acn_opt = torch.optim.Adam(self.acn.parameters(), lr=lr)
 		if self.use_encoder:
 			self.encoder_opt = torch.optim.Adam(self.encoder.parameters(), lr=lr)
+
+		if self.use_encoder:
+			MEAN = torch.tensor([0.0, 0.0, 0.0])
+			STD = torch.tensor([1.0, 1.0, 1.0])
+			self.customAug = T.Compose([T.Normalize(mean=MEAN, std=STD)])
 
 		self.set_train(actor=True, acn=True, encoder=True)
 
@@ -102,6 +108,7 @@ class Agent:
 
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
+			obs = self.customAug(obs / 255.0)
 			obs = self.encoder(obs)
 		
 		stddev = 0.1 # utils.schedule(self.stddev_schedule, step)
@@ -116,6 +123,7 @@ class Agent:
 
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
+			obs = self.customAug(obs / 255.0)
 			obs = self.encoder(obs)
 				
 		action_confidence = self.acn(obs, action)
@@ -130,14 +138,17 @@ class Agent:
 
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
+			obs = self.customAug(obs / 255.0)
 			obs = self.encoder(obs)
 		
 		stddev = 0.1 # utils.schedule(self.stddev_schedule, step)
 		
 		# TODO: Compute the actor loss using log_prob on output of the actor
 		dist = self.actor(obs, stddev)
-		log_prob = dist.log_prob(action).sum(-1, keepdim=True)
-		actor_loss = -log_prob.mean()
+		act = dist.sample()
+		actor_loss = F.mse_loss(act, action)
+		# log_prob = dist.log_prob(action).sum(-1, keepdim=True)
+		# actor_loss = -log_prob.mean()
 
 		# TODO: Update the actor (and encoder for pixels)		
 		if self.use_encoder:
@@ -162,6 +173,7 @@ class Agent:
 
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
+			obs = self.customAug(obs / 255.0)
 			obs = self.encoder(obs)
 		
 		action_confidence = self.acn(obs, action)
@@ -194,6 +206,7 @@ class Agent:
   
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
+			obs = self.customAug(obs / 255.0)
 			obs = self.encoder(obs)
 		
 		stddev = 0.1 # utils.schedule(self.stddev_schedule, step)

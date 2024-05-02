@@ -57,7 +57,7 @@ class Workspace:
 		with open(dataset_path, 'rb') as f:
 			self.dataset = pickle.load(f)
 		print(len(self.dataset))
-		self.dataloader = DataLoader(self.dataset, batch_size=64, shuffle=False)
+		self.dataloader = DataLoader(self.dataset, batch_size=64, shuffle=True)
 		self.train_env.reset() # Reset env after loading some data.
   
 	def get_expert_action(self, obs):
