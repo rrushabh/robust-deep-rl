@@ -262,3 +262,6 @@ class Agent:
 	def set_all_eval(self):
 		self.set_eval(actor=True, acn=True, encoder=True)
 
+	def get_model_dicts(self):
+		return self.actor.state_dict(), self.acn.state_dict(), self.encoder.state_dict()
+
