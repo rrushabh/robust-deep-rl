@@ -34,21 +34,22 @@ class Workspace:
             "device": "cuda",
             "experience_buffer_len": 150000,
             "total_training_episodes": 1000,
-            "train_every": 20,
-            "num_training_steps": 10000,
+            "train_every": 3,
+            "num_training_steps": 200,
             "num_expl_steps": 1000,
-            "num_bc_steps": 300, 
+            "num_bc_steps": 5000, 
             "num_rl_episodes": 500,
             "batch_size": 256,
             "lr": 1e-4,
             "stddev_schedule": 0.1,
-            "eval_every": 20,
+            "eval_every": 3,
             "num_eval_episodes": 5,
             "hidden_dim": 256,
             "obs_type": "pixels",
             "stddev_clip": 0.1,
             "use_tb": True
         }
+		print(self.cfg)
 
 		self.device = torch.device(self.cfg["device"])
 		self.train_env = gym.make("CarRacing-v2", render_mode=None)
@@ -169,7 +170,7 @@ class Workspace:
 		# TODO: Maybe experiment with encoder training here as well.
 		# For num training steps, sample data from the training data.
 		avg_loss = 0.
-		iterable = trange(self.cfg["num_training_steps"])
+		iterable = trange(self.cfg["num_training_steps"], disable=True)
 		for _ in iterable:
 			obs, expert_action = self.expert_buffer.sample(self.cfg["batch_size"])
 			obs = torch.from_numpy(obs).float().to(self.device)
@@ -187,7 +188,7 @@ class Workspace:
 
 	def run(self):
 		train_loss, eval_reward, episode_length = None, 0, 0
-		bc_iterable = trange(self.cfg["num_bc_steps"])
+		bc_iterable = trange(self.cfg["num_bc_steps"], disable=True)
 		# TODO: Make sure that these APIs to the agent are correct.
 		# TODO: num_bc_steps is wrong as it does not count the num of episdoes here, simply the number of steps.
 		self.agent.set_train(actor=True, acn=True, encoder=True)
@@ -201,7 +202,7 @@ class Workspace:
 			metrics = self.agent.update_actor(obs, expert_action)
 			wandb.log({'actor_bc_loss': metrics['actor_loss']})
 		
-		bc_iterable = trange(self.cfg["num_bc_steps"])
+		bc_iterable = trange(self.cfg["num_bc_steps"], disable=True)
 		self.agent.set_all_eval()
 		self.agent.set_train(actor=False, acn=True, encoder=True)
 		for ep_num in bc_iterable:
@@ -216,7 +217,7 @@ class Workspace:
 			#TODO: Make sure the Agent is be able to hand 2 * batch_size for the batch size.
 			metrics = self.agent.update_acn(obs, expert_action, confidence)
 			wandb.log({'acn_bc_loss': metrics['acn_loss']})
-		iterable = trange(self.cfg["num_rl_episodes"])
+		iterable = trange(self.cfg["num_rl_episodes"], disable=True)
 		exp_call_vs_success_rate = []
 		
 		self.agent.set_all_eval()
