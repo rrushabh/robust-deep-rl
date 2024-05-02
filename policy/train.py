@@ -139,7 +139,6 @@ class Workspace:
 		obs_new = np.concatenate([obs, obs], axis=0)
 		expert_action_new = np.concatenate([expert_action, expert_action_bad], axis=0)
 		confidence = np.concatenate([confidence_good, confidence_bad], axis=0)
-		confidence = np.ones((obs_new.shape[0], 1))
 		return obs_new, expert_action_new, confidence
  
 	def model_training_step(self):
