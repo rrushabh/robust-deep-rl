@@ -105,7 +105,7 @@ class Agent:
 	
 	def act_actor(self, obs):
 		obs = obs.float()
-
+		obs = obs.to(self.device)
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
 			obs = self.customAug(obs / 255.0)
@@ -115,12 +115,13 @@ class Agent:
 		
 		dist_action = self.actor(obs, stddev)
 		action = dist_action.mean
-		return action.cpu().numpy()[0]
+		return action.cpu().numpy()
 	
 	def act_acn(self, obs, action):
 		obs = obs.float()
 		action = action.float()
-
+		obs = obs.to(self.device)
+		action = action.to(self.device)
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
 			obs = self.customAug(obs / 255.0)
@@ -135,6 +136,8 @@ class Agent:
 
 		obs = obs.float()
 		action = action.float()
+		obs = obs.to(self.device)
+		action = action.to(self.device)
 
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
@@ -170,6 +173,8 @@ class Agent:
 
 		obs = obs.float()
 		action = action.float()
+		obs = obs.to(self.device)
+		action = action.to(self.device)
 
 		if self.use_encoder:
 			# TODO: Do we need to augment the observations?
@@ -178,7 +183,7 @@ class Agent:
 		
 		action_confidence = self.acn(obs, action)
   
-		print("Sanity check ACN :: ", action_confidence, action_assessment)
+		# print("Sanity check ACN :: ", action_confidence, action_assessment)
 
 		acn_loss = F.mse_loss(action_confidence, action_assessment)
 
@@ -202,6 +207,9 @@ class Agent:
 		metrics = dict()
 		obs = obs.float()
 		expert_action = expert_action.float()
+		obs = obs.to(self.device)
+		expert_action = expert_action.to(self.device)
+		
 		confidence = self.act_acn(obs, expert_action)
   
 		if self.use_encoder:
