@@ -9,7 +9,9 @@ class Actor(nn.Module):
 
         self.policy = nn.Sequential(nn.Linear(repr_dim, hidden_dim),
 									nn.ReLU(inplace=True),
-									nn.Linear(hidden_dim, hidden_dim),
+									nn.Linear(hidden_dim, 2 * hidden_dim),
+                                    nn.ReLU(inplace=True),
+                                    nn.Linear(2 * hidden_dim, hidden_dim),
 									nn.ReLU(inplace=True))
 
         self.direction = nn.Sequential(nn.Linear(hidden_dim, 1),
@@ -23,9 +25,8 @@ class Actor(nn.Module):
 
     def forward(self, obs, std):
         repr = self.policy(obs)
-        mu = torch.stack((self.direction(repr), self.gas(repr), self.brake(repr)), dim=0)
-
+        mu = torch.stack((self.direction(repr), self.gas(repr), self.brake(repr)), dim=1).squeeze()
         std = torch.ones_like(mu) * std
         # TODO: does calling truncated normal on a 3-part action work?
-        dist = utils.TruncatedNormal(mu, std)
+        dist = utils.TruncatedNormal3D(mu, std)
         return dist
