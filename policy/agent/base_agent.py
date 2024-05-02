@@ -222,8 +222,7 @@ class Agent:
 		# TODO: Compute the actor loss using log_prob on output of the actor
 		dist = self.actor(obs, stddev)
 		log_prob = dist.log_prob(expert_action).sum(-1, keepdim=True)
-		actor_loss = (-log_prob.mean()) * confidence # --------------------------------> Main difference from `update_actor`.
-
+		actor_loss = -(log_prob * confidence).mean() # --------------------------------> Main difference from `update_actor`.
 		# TODO: Update the actor (and encoder for pixels)		
 		if self.use_encoder:
 			self.encoder_opt.zero_grad(set_to_none=True)
